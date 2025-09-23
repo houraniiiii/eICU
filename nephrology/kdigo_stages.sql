@@ -1,4 +1,3 @@
--- KDIGO AKI staging for eICU using derived creatinine, urine output, and dialysis events.
 WITH cr_stg AS (
     SELECT
         cr.patientunitstayid

@@ -1,33 +1,3 @@
--- Dialysis events extraction from eICU (BigQuery)
--- Output columns: patientunitstayid, chartoffset (min from ICU admit), dialysis_type
--- Categories emitted exactly as specified:
---   acute_SCUF
---   chronic_SCUF
---   unknown_SCUF
---   SLED
---   CVVH
---   CAVHD
---   CVVHD
---   acute_intermittent_hemodialysis
---   chronic_intermittent_hemodialysis
---   unknown_intermittent_hemodialysis
---   acute_peritoneal dialysis
---   chronic_peritoneal dialysis
---   unknown_peritoneal dialysis
---   av_fistula
---   av_shunt
---   hemodialysis_catheter
---   peritoneal_catheter
---   dialysis_electrolytes
---   dialysis_output
---   past hemodialysis
---   past peritoneal dialysis
---   dialysis_graft
-
----- chartoffset preferentially uses the documented offset when present, otherwise the entry offset 
-
-
--- 1) Treatment events: exact treatmentString mappings to modality categories
 WITH treatment_events AS (
   SELECT
     patientUnitStayID,
@@ -107,7 +77,6 @@ WITH treatment_events AS (
   )
 ),
 
--- 2) Nurse assessment: AV Fistula presence indicates a dialysis-related access event
 nurseassessment_events AS (
   SELECT
     patientUnitStayID,
@@ -117,7 +86,6 @@ nurseassessment_events AS (
   WHERE cellLabel = 'AV Fistula'
 ),
 
--- 3) Intake/Output: dialysisTotal indicates a dialysis session; dedupe on (stay, offset)
 intakeoutput_raw AS (
   SELECT
     patientUnitStayID,
@@ -142,7 +110,6 @@ intakeoutput_events AS (
   FROM intakeoutput_dedup
 ),
 
--- 4) Diagnosis: exact diagnosisString mappings
 diagnosis_events AS (
   SELECT
     patientUnitStayID,
@@ -157,7 +124,6 @@ diagnosis_events AS (
   )
 ),
 
--- 5) Past history: chronic modality identification
 pasthistory_events AS (
   SELECT
     patientUnitStayID,
@@ -173,7 +139,6 @@ pasthistory_events AS (
   )
 ),
 
--- 6) Admission diagnosis: access-related surgery at admission
 admissiondx_events AS (
   SELECT
     patientUnitStayID,
@@ -183,7 +148,6 @@ admissiondx_events AS (
   WHERE admitDxPath = 'admission diagnosis|All Diagnosis|Operative|Diagnosis|Cardiovascular|Graft for dialysis, insertion of'
 ),
 
--- Final union of all event feeds
 all_events AS (
   SELECT * FROM treatment_events
   UNION ALL
