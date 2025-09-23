@@ -48,25 +48,87 @@ WITH cr_stg AS (
     FROM kdigo_uo uo
 )
 
-, dialysis_stg AS (
+, dialysis_events AS (
     SELECT
         d.patientunitstayid
         , d.chartoffset
-        , CASE
-            WHEN d.dialysis_type IN (
-                'SCUF'
-                , 'SLED'
-                , 'CVVH'
-                , 'CAVHD'
-                , 'CVVHD'
-                , 'Intermittent hemodialysis (IHD)'
-                , 'peritoneal dialysis'
-                , 'dialysis_output'
-            ) THEN 3
-            ELSE NULL
-          END AS aki_stage_rrt
+        , d.dialysis_type
     FROM dialysis d
     WHERE d.chartoffset IS NOT NULL
+)
+
+, chronic_dialysis_flags AS (
+    SELECT DISTINCT
+        de.patientunitstayid
+    FROM dialysis_events de
+    WHERE de.dialysis_type IN (
+        'chronic_SCUF'
+        , 'chronic_intermittent_hemodialysis'
+        , 'chronic_peritoneal_dialysis'
+        , 'past_hemodialysis'
+        , 'past peritoneal dialysis'
+        , 'dialysis_graft'
+        , 'av_fistula'
+        , 'av_shunt'
+    )
+)
+
+, aki_rrt_events AS (
+    SELECT
+        de.patientunitstayid
+        , de.chartoffset
+        , de.dialysis_type
+    FROM dialysis_events de
+    LEFT JOIN chronic_dialysis_flags cf
+        ON de.patientunitstayid = cf.patientunitstayid
+    WHERE de.dialysis_type IN (
+            'acute_SCUF'
+            , 'SLED'
+            , 'CVVH'
+            , 'CAVHD'
+            , 'CVVHD'
+            , 'acute_intermittent_hemodialysis'
+            , 'acute_peritoneal_dialysis'
+        )
+        OR (
+            de.dialysis_type IN (
+                'unknown_SCUF'
+                , 'unknown_intermittent_hemodialysis'
+                , 'unknown_peritoneal_dialysis'
+            )
+            AND cf.patientunitstayid IS NULL
+        )
+)
+
+, dialysis_output_events AS (
+    SELECT
+        de.patientunitstayid
+        , de.chartoffset
+    FROM dialysis_events de
+    LEFT JOIN chronic_dialysis_flags cf
+        ON de.patientunitstayid = cf.patientunitstayid
+    WHERE de.dialysis_type = 'dialysis_output'
+        AND (
+            cf.patientunitstayid IS NULL
+            OR EXISTS (
+                SELECT 1
+                FROM aki_rrt_events ar
+                WHERE ar.patientunitstayid = de.patientunitstayid
+                    AND ABS(ar.chartoffset - de.chartoffset) <= 720
+            )
+        )
+)
+
+, dialysis_stg AS (
+    SELECT
+        patientunitstayid
+        , chartoffset
+        , 3 AS aki_stage_rrt
+    FROM (
+        SELECT patientunitstayid, chartoffset FROM aki_rrt_events
+        UNION ALL
+        SELECT patientunitstayid, chartoffset FROM dialysis_output_events
+    )
 )
 
 , tm_stg AS (
@@ -121,3 +183,4 @@ LEFT JOIN dialysis_stg dialysis
     AND tm.chartoffset = dialysis.chartoffset
 WHERE tm.chartoffset IS NOT NULL
 ORDER BY p.patientunitstayid, tm.chartoffset;
+

@@ -1,13 +1,19 @@
 -- Dialysis events extraction from eICU (BigQuery)
 -- Output columns: patientunitstayid, chartoffset (min from ICU admit), dialysis_type
 -- Categories emitted exactly as specified:
---   SCUF
+--   acute_SCUF
+--   chronic_SCUF
+--   unknown_SCUF
 --   SLED
 --   CVVH
 --   CAVHD
 --   CVVHD
---   Intermittent hemodialysis (IHD)
---   peritoneal dialysis,
+--   acute_intermittent_hemodialysis
+--   chronic_intermittent_hemodialysis
+--   unknown_intermittent_hemodialysis
+--   acute_peritoneal dialysis
+--   chronic_peritoneal dialysis
+--   unknown_peritoneal dialysis
 --   av_fistula
 --   av_shunt
 --   hemodialysis_catheter
@@ -28,28 +34,28 @@ WITH treatment_events AS (
     treatmentOffset AS chartoffset,
     CASE treatmentString
       -- SCUF
-      WHEN 'renal|dialysis|ultrafiltration (fluid removal only)' THEN 'SCUF'
-      WHEN 'renal|dialysis|ultrafiltration (fluid removal only)|emergent' THEN 'SCUF'
-      WHEN 'renal|dialysis|ultrafiltration (fluid removal only)|for acute renal failure' THEN 'SCUF'
-      WHEN 'renal|dialysis|ultrafiltration (fluid removal only)|for chronic renal failure' THEN 'SCUF'
+      WHEN 'renal|dialysis|ultrafiltration (fluid removal only)' THEN 'unknown_SCUF'
+      WHEN 'renal|dialysis|ultrafiltration (fluid removal only)|emergent' THEN 'acute_SCUF'
+      WHEN 'renal|dialysis|ultrafiltration (fluid removal only)|for acute renal failure' THEN 'acute_SCUF'
+      WHEN 'renal|dialysis|ultrafiltration (fluid removal only)|for chronic renal failure' THEN 'chronic_SCUF'
       -- SLED
       WHEN 'renal|dialysis|SLED' THEN 'SLED'
       -- CVVH / CAVHD / CVVHD
       WHEN 'renal|dialysis|C V V H' THEN 'CVVH'
       WHEN 'renal|dialysis|C A V H D' THEN 'CAVHD'
       WHEN 'renal|dialysis|C V V H D' THEN 'CVVHD'
-      -- Intermittent hemodialysis (IHD)
-      WHEN 'renal|dialysis|hemodialysis' THEN 'Intermittent hemodialysis (IHD)'
-      WHEN 'renal|dialysis|hemodialysis|emergent' THEN 'Intermittent hemodialysis (IHD)'
-      WHEN 'renal|dialysis|hemodialysis|for acute renal failure' THEN 'Intermittent hemodialysis (IHD)'
-      WHEN 'renal|dialysis|hemodialysis|for chronic renal failure' THEN 'Intermittent hemodialysis (IHD)'
-      WHEN 'toxicology|drug overdose|drug removal measures|hemodialysis' THEN 'Intermittent hemodialysis (IHD)'
+      -- intermittent_hemodialysis
+      WHEN 'renal|dialysis|hemodialysis' THEN 'unknown_intermittent_hemodialysis'
+      WHEN 'renal|dialysis|hemodialysis|emergent' THEN 'acute_intermittent_hemodialysis'
+      WHEN 'renal|dialysis|hemodialysis|for acute renal failure' THEN 'acute_intermittent_hemodialysis'
+      WHEN 'renal|dialysis|hemodialysis|for chronic renal failure' THEN 'chronic_intermittent_hemodialysis'
+      WHEN 'toxicology|drug overdose|drug removal measures|hemodialysis' THEN 'toxicology_intermittent_hemodialysis'
       -- peritoneal dialysis
-      WHEN 'renal|dialysis|peritoneal dialysis' THEN 'peritoneal dialysis'
-      WHEN 'renal|dialysis|peritoneal dialysis|emergent' THEN 'peritoneal dialysis'
-      WHEN 'renal|dialysis|peritoneal dialysis|for chronic renal failure' THEN 'peritoneal dialysis'
-      WHEN 'renal|dialysis|peritoneal dialysis|for acute renal failure' THEN 'peritoneal dialysis'
-      WHEN 'renal|dialysis|peritoneal dialysis|with cannula placement' THEN 'peritoneal dialysis'
+      WHEN 'renal|dialysis|peritoneal dialysis' THEN 'unknown_peritoneal dialysis'
+      WHEN 'renal|dialysis|peritoneal dialysis|emergent' THEN 'acute_peritoneal dialysis'
+      WHEN 'renal|dialysis|peritoneal dialysis|for chronic renal failure' THEN 'chronic_peritoneal dialysis'
+      WHEN 'renal|dialysis|peritoneal dialysis|for acute renal failure' THEN 'acute_peritoneal dialysis'
+      WHEN 'renal|dialysis|peritoneal dialysis|with cannula placement' THEN 'unknown_peritoneal dialysis'
       -- Access, catheter, and electrolyte-related dialysis entries
       WHEN 'renal|dialysis|arteriovenous shunt for renal dialysis' THEN 'av_shunt'
       WHEN 'cardiovascular|vascular surgery|dialysis access surgery' THEN 'av_fistula'
@@ -143,7 +149,6 @@ diagnosis_events AS (
     diagnosisOffset AS chartoffset,
     CASE diagnosisString
       WHEN 'cardiovascular|post vascular surgery|s/p dialysis access surgery' THEN 'av_fistula'
-      WHEN 'renal|disorder of kidney|acute renal failure|unstable during hemodialysis' THEN 'Intermittent hemodialysis (IHD)'
     END AS dialysis_type
   FROM `physionet-data.eicu_crd.diagnosis`
   WHERE diagnosisString IN (
@@ -158,8 +163,8 @@ pasthistory_events AS (
     patientUnitStayID,
     COALESCE(pastHistoryOffset, pastHistoryEnteredOffset) AS chartoffset,
     CASE pastHistoryPath
-      WHEN 'notes/Progress Notes/Past History/Organ Systems/Renal  (R)/Renal Failure/renal failure - hemodialysis' THEN 'past hemodialysis'
-      WHEN 'notes/Progress Notes/Past History/Organ Systems/Renal  (R)/Renal Failure/renal failure - peritoneal dialysis' THEN 'past peritoneal dialysis'
+      WHEN 'notes/Progress Notes/Past History/Organ Systems/Renal  (R)/Renal Failure/renal failure - hemodialysis' THEN 'past_hemodialysis'
+      WHEN 'notes/Progress Notes/Past History/Organ Systems/Renal  (R)/Renal Failure/renal failure - peritoneal dialysis' THEN 'past_peritoneal_dialysis'
     END AS dialysis_type
   FROM `physionet-data.eicu_crd.pasthistory`
   WHERE pastHistoryPath IN (
@@ -197,6 +202,3 @@ SELECT
   chartoffset,
   dialysis_type
 FROM all_events;
-
-
-
